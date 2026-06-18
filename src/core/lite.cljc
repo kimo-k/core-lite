@@ -5,7 +5,7 @@
 
   Require with an alias: [core.lite :as 🪶]
   github.com/kimo-k/core-lite"
-  (:refer-clojure :exclude [assoc update assoc-in select-keys range])
+  (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range])
   #?(:clj (:require [clojure.core :as core])))
 
 #?(:clj
@@ -40,6 +40,21 @@
      (if-let [k (first path)]
        (-assoc m k (assoc-in (get m k {}) (next path) v))
        v)))
+
+#?(:clj
+   (defn update-in [& args] (apply core/update-in args))
+   :cljs
+   (defn update-in
+     "Drop-in for cljs.core/update-in in :lite-mode builds. Only 3-arity [m path f]
+  and 4-arity [m path f x] are provided — variadic would pull in apply infrastructure."
+     ([m path f]
+      (if-let [k (first path)]
+        (assoc m k (update-in (get m k {}) (next path) f))
+        (f m)))
+     ([m path f x]
+      (if-let [k (first path)]
+        (assoc m k (update-in (get m k {}) (next path) f x))
+        (f m x)))))
 
 (defn select-keys
   "Drop-in for cljs.core/select-keys in :lite-mode builds. Loop-based; no lazy

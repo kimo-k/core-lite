@@ -129,22 +129,19 @@
      (-deref [_] state)
 
      IMeta
-     (-meta [_] nil)
+     (-meta [_] meta)
 
      IWatchable
      (-notify-watches [this oldval newval]
-       ;; reduce-kv via IKVReduce — avoids doseq's ChunkedSeq + MapEntry destructure
-       (reduce-kv (fn [_ k f] (f k this oldval newval) nil) nil watches))
+       (.forEach watches (fn [f k _] (f k this oldval newval))))
      (-add-watch [this key f]
-       (set! (.-watches this)
-             (if (nil? watches)
-               {key f}                   ; variable keys → HashMapLite (lighter)
-               (-assoc watches key f)))
+       (when (nil? watches)
+         (set! (.-watches this) (js/Map.)))
+       (.set watches key f)
        this)
-
      (-remove-watch [this key]
        (when-not (nil? watches)
-         (set! (.-watches this) (-dissoc watches key))))
+         (.delete watches key)))
 
      IReset
      (-reset! [this new-value]

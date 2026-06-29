@@ -5,7 +5,8 @@
 
   Require with an alias: [core.lite :as 🪶]
   github.com/kimo-k/core-lite"
-  (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range atom])
+  (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range
+                            atom])
   #?(:clj (:require [clojure.core :as core])))
 
 #?(:clj
@@ -111,31 +112,66 @@
         (if (>= i end) acc (recur (inc i) (conj acc i)))))
      ([start end step]
       (loop [i start acc []]
-        (if (>= i end) acc (recur (+ i step) (conj acc i))))))
+        (if (>= i end) acc (recur (+ i step) (conj acc i)))))))
 
 #?(:cljs
-   (deftype LiteAtom [^:mutable state ^:mutable watches]
+   (deftype LiteAtom [state meta validator watches]
+     Object
+     (equiv [this other]
+       (-equiv this other))
+
+     IAtom
+
+     IEquiv
+     (-equiv [o other] (identical? o other))
+
      IDeref
      (-deref [_] state)
+
+     IMeta
+     (-meta [_] nil)
+
+     IWatchable
+     (-notify-watches [this oldval newval]
+       ;; reduce-kv via IKVReduce — avoids doseq's ChunkedSeq + MapEntry destructure
+       (reduce-kv (fn [_ k f] (f k this oldval newval) nil) nil watches))
+     (-add-watch [this key f]
+       (set! (.-watches this)
+             (if (nil? watches)
+               {key f}                   ; variable keys → HashMapLite (lighter)
+               (-assoc watches key f)))
+       this)
+
+     (-remove-watch [this key]
+       (when-not (nil? watches)
+         (set! (.-watches this) (-dissoc watches key))))
+
      IReset
-     (-reset! [this new-state]
-       (let [old state]
-         (set! state new-state)
-         (reduce-kv (fn [_ k f] (f k this old new-state)) nil watches)
-         new-state))
+     (-reset! [this new-value]
+       (let [old-value state]
+         (set! (.-state this) new-value)
+         (when-not (nil? watches)
+           (-notify-watches this old-value new-value))
+         new-value))
+
      ISwap
      (-swap! [this f]     (-reset! this (f state)))
-     (-swap! [this f a]   (-reset! this (f state a)))
-     (-swap! [this f a b] (-reset! this (f state a b)))
-     IWatchable
-     (-add-watch    [this k f] (set! watches (assoc watches k f)) this)
-     (-remove-watch [this k]   (set! watches (dissoc watches k)) this)))
+     (-swap! [this f x]   (-reset! this (f state x)))
+     (-swap! [this f x y] (-reset! this (f state x y)))
+
+     IHash
+     (-hash [this] (goog/getUid this))))
 
 #?(:clj
    (defn atom [init] (core/atom init))
    :cljs
    (defn atom
-     "Drop-in for cljs.core/atom in :lite-mode builds. No validator, no meta,
-  no IPrintWithWriter — safe without relying on DCE to eliminate the printer chain."
-     [init]
-     (LiteAtom. init {})))
+     "Drop-in for cljs.core/atom in :lite-mode builds. Returns a LiteAtom with
+  only :state and :watches fields (no :meta, no :validator) and a reduce-kv-based
+  -notify-watches (no doseq → no ChunkedSeq leak).
+
+  LiteAtom implements IReset and ISwap (in addition to cljs.core/Atom's protocols)
+  so cljs.core/swap!, reset!, add-watch, remove-watch, deref all dispatch correctly
+  via protocols. ISwap is 2/3/4-arity — no variadic (avoids apply infrastructure)."
+     [x]
+     (LiteAtom. x nil nil nil)))

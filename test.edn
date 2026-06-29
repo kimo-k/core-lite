@@ -18,4 +18,14 @@
                cljs-core (js/console.log (range 5))}
 
   vec         {core-lite (js/console.log [1 2])
-               cljs-core (js/console.log (vec '(1 2)))}}}
+               cljs-core (js/console.log (vec '(1 2)))}
+
+  swap!       {core-lite (swap! (🪶/atom 0) inc)
+               cljs-core (swap! (atom 0) inc)}
+
+  add-watch   {core-lite (let [a (🪶/atom 0)]
+                           (add-watch a :k (fn [_ _ old new] (js/console.log new)))
+                           (swap! a inc))
+               cljs-core (let [a (atom 0)]
+                           (add-watch a :k (fn [_ _ old new] (js/console.log new)))
+                           (swap! a inc))}}}

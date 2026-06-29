@@ -5,7 +5,7 @@
 
   Require with an alias: [core.lite :as 🪶]
   github.com/kimo-k/core-lite"
-  (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range])
+  (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range atom])
   #?(:clj (:require [clojure.core :as core])))
 
 #?(:clj
@@ -111,4 +111,31 @@
         (if (>= i end) acc (recur (inc i) (conj acc i)))))
      ([start end step]
       (loop [i start acc []]
-        (if (>= i end) acc (recur (+ i step) (conj acc i)))))))
+        (if (>= i end) acc (recur (+ i step) (conj acc i))))))
+
+#?(:cljs
+   (deftype LiteAtom [^:mutable state ^:mutable watches]
+     IDeref
+     (-deref [_] state)
+     IReset
+     (-reset! [this new-state]
+       (let [old state]
+         (set! state new-state)
+         (reduce-kv (fn [_ k f] (f k this old new-state)) nil watches)
+         new-state))
+     ISwap
+     (-swap! [this f]     (-reset! this (f state)))
+     (-swap! [this f a]   (-reset! this (f state a)))
+     (-swap! [this f a b] (-reset! this (f state a b)))
+     IWatchable
+     (-add-watch    [this k f] (set! watches (assoc watches k f)) this)
+     (-remove-watch [this k]   (set! watches (dissoc watches k)) this)))
+
+#?(:clj
+   (defn atom [init] (core/atom init))
+   :cljs
+   (defn atom
+     "Drop-in for cljs.core/atom in :lite-mode builds. No validator, no meta,
+  no IPrintWithWriter — safe without relying on DCE to eliminate the printer chain."
+     [init]
+     (LiteAtom. init {})))

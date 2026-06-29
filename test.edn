@@ -1,0 +1,21 @@
+{:test-expr
+ {assoc       {core-lite (js/console.log (🪶/assoc {:a 1} :b 2))
+               cljs-core (js/console.log (assoc {:a 1} :b 2 :c 3 :d 4 :e 5 :x  6 :n 9 :x 11))}
+
+  update      {core-lite (js/console.log (🪶/update {:a 1} :a inc))
+               cljs-core (js/console.log (update {:a 1} :a + 5))}
+
+  assoc-in    {core-lite (js/console.log (🪶/assoc-in {} [:a :b] 1))
+               cljs-core (js/console.log (assoc-in {} [:a :b] 1))}
+
+  update-in   {core-lite (js/console.log (🪶/update-in {:a {:b 1}} [:a :b] inc))
+               cljs-core (js/console.log (update-in {:a {:b 1}} [:a :b] inc))}
+
+  select-keys {core-lite (js/console.log (🪶/select-keys {:a 1 :b 2 :c 3} [:a :b]))
+               cljs-core (js/console.log (select-keys {:a 1 :b 2 :c 3} [:a :b]))}
+
+  range       {core-lite (js/console.log (🪶/range 5))
+               cljs-core (js/console.log (range 5))}
+
+  vec         {core-lite (js/console.log [1 2])
+               cljs-core (js/console.log (vec '(1 2)))}}}

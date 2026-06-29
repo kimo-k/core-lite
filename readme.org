@@ -1,0 +1,40 @@
+* core.lite: alternatives to cljs.core fns which are lite-mode friendly
+
+** Usage
+#+begin_src clojurescript
+  (ns my.demo
+    (:require [core.lite :as 🪶]))
+
+  (🪶/update {:a 1} :a inc)
+#+end_src
+
+** Testing
+Each entry in test.edn contains alternative expressions - one using
+regular cljs, one using core-lite. Some core-lite fns have different
+signatures, and the expressions have different code. For instance,
+core-lite's asoc only accepts 3 args, while regular assoc is
+variadic. The purpose of each test is not to compare the exact same
+expression, but just to demonstrate what you'll get from using
+core-lite.
+
+Compare the build size of all expressions:
+#+begin_src bash
+  bb report
+#+end_src
+
+Compare the build size for one pair of expressions:
+#+begin_src bash
+  bb report :expr swap!
+#+end_src
+
+Build one expression:
+#+begin_src bash
+  bb test :expr swap! :variant core-lite :build lite
+  du -h .out/swap!-core-lite-lite.js
+#+end_src
+
+Build with pseudo-names (useful for diagnosing DCE):
+#+begin_src bash
+  bb test :expr swap! :variant core-lite :build pseudo
+  grep -nbo toString '.out/swap!-core-lite-pseudo.js'
+#+end_src

@@ -1,85 +1,91 @@
 {:tasks
  {:requires ([babashka.process :as proc] [clojure.edn :as edn])
-  :init (do
-          (def deps "{:paths [\"test\" \"src\"] :deps {org.clojure/clojurescript {:mvn/version \"1.12.145\"}}}")
-          (def modes
-            {'lite   "{:lite-mode true :elide-to-string true}"
-             'pseudo "{:pseudo-names true :lite-mode true :elide-to-string true}"})
+  :init     (do
+              (comment (require '[babashka.process :as proc :refer [shell]]
+                                '[babashka.tasks :refer [clojure]]
+                                '[clojure.edn :as edn]))
+              (def deps "{:paths [\"test\" \"src\"] :deps {org.clojure/clojurescript {:mvn/version \"1.12.145\"}}}")
+              (def modes
+                {'lite   "{:lite-mode true :elide-to-string true}"
+                 'pseudo "{:pseudo-names true :lite-mode true :elide-to-string true}"})
 
-          (defn args []
-            (apply hash-map (map edn/read-string *command-line-args*)))
+              (defn args []
+                (apply hash-map (map edn/read-string *command-line-args*)))
 
-          (defn all-tests []
-            (-> "test.edn" slurp edn/read-string :test-expr))
+              (defn all-tests []
+                (-> "test.edn" slurp edn/read-string :test-expr))
 
-          (defn prepare! [test variant]
-            (let [tests (all-tests)
-                  expr  (or (get-in tests [test variant])
-                            (throw (ex-info (str "No variant " variant " for :expr " test)
-                                            {:known (keys tests)})))]
-              (spit "test/test.cljs"
-                    (str "(ns test\n  (:require [core.lite :as 🪶]))\n\n"
-                         "(defn ^:export main []\n  "
-                         (pr-str expr) ")\n"))))
+              (defn prepare! [expr variant]
+                (let [tests (all-tests)
+                      expr  (or (get-in tests [expr variant])
+                                (throw (ex-info (str "No variant " variant " for :expr " expr)
+                                                {:known (expr tests)})))]
+                  (spit "test/test.cljs"
+                        (str "(ns test\n  (:require [core.lite :as 🪶]))\n\n"
+                             "(defn ^:export main []\n  "
+                             (pr-str expr) ")\n"))))
 
-          (defn compile! [test variant build]
-            (clojure "-Sdeps" deps
-                     "-M" "-m" "cljs.main"
-                     "-O" "advanced"
-                     "-d" ".out"
-                     "-o" (str ".out/" test "-" variant "-" build ".js")
-                     "-co" (modes build)
-                     "-c" "test"))
+              (defn compile! [test variant build]
+                (clojure "-Sdeps" deps
+                         "-M" "-m" "cljs.main"
+                         "-O" "advanced"
+                         "-d" ".out"
+                         "-o" (str ".out/" test "-" variant "-" build ".js")
+                         "-co" (modes build)
+                         "-c" "test"))
 
-          (defn brotli-bytes [path]
-            (-> (deref (proc/process ["brotli" "--best" "--keep" "--stdout" path]
-                                     {:out :bytes}))
-                :out count))
+              (defn brotli-bytes [path]
+                (-> (deref (proc/process ["brotli" "--best" "--keep" "--stdout" path]
+                                         {:out :bytes}))
+                    :out count))
 
-          (defn measure [test variant]
-            (brotli-bytes (str ".out/" test "-" variant "-lite.js")))
+              (defn measure [test variant]
+                (brotli-bytes (str ".out/" test "-" variant "-lite.js")))
 
-          (defn render-bars [data]
-            (let [max-n (apply max (mapcat vals (vals data)))
-                  bar   (fn [x] (apply str (repeat (int (* 50 (/ x max-n))) \|)))]
-              (doseq [[t variants] data]
-                (println (str "\n" t))
-                (doseq [[v n] variants]
-                  (println (format "  %-10s %s %d bytes (brotli)" (str v) (bar n) n)))))))
+              (defn render-bars [data]
+                (let [max-n (apply max (mapcat vals (vals data)))
+                      bar   (fn [x] (apply str (repeat (int (* 50 (/ x max-n))) \|)))]
+                  (doseq [[t variants] data]
+                    (println (str "\n" t))
+                    (doseq [[v n] variants]
+                      (println (format "  %-10s %s %d bytes (brotli)" (str v) (bar n) n)))))))
 
   prepare {:task (let [{:keys [expr variant]} (args)]
                    (prepare! expr variant))}
 
-  test    {:depends [prepare]
-           :task (let [{:keys [expr variant build] :or {build 'lite}} (args)]
-                   (compile! expr variant build))}
+  test {:depends [prepare]
+        :task    (let [{:keys [expr variant build]} (args)]
+                   (let [build (or build variant)]
+                     (compile! expr variant build)))}
 
   test-all
   {:task (doseq [[t variants] (all-tests)
-                 v (keys variants)]
+                 v            (keys variants)]
            (println "compiling" t v)
            (prepare! t v)
            (compile! t v 'lite))}
 
-  test-report
+  report-all
   {:depends [test-all]
-   :task (let [tests (all-tests)
-               data  (into (sorted-map)
-                           (for [t (keys tests)]
-                             [t (into (sorted-map)
-                                      (for [v (keys (tests t))]
-                                        [v (measure t v)]))]))]
-           (println "\n=== brotli size: core-lite vs cljs.core (lite-mode) ===")
-           (render-bars data))}
+   :task    (let [tests (all-tests)
+                  data  (into (sorted-map)
+                              (for [t (keys tests)]
+                                [t (into (sorted-map)
+                                         (for [v (keys (tests t))]
+                                           [v (measure t v)]))]))]
+              (println "\n=== brotli size: core-lite vs cljs.core (lite-mode) ===")
+              (render-bars data))}
 
   report
-  {:task (let [{:keys [expr]} (args)
-               variants (keys (get (all-tests) expr))]
-           (doseq [v variants]
-             (println "compiling" expr v)
-             (prepare! expr v)
-             (compile! expr v 'lite))
-           (println (str "\n=== " expr " (lite-mode brotli) ==="))
-           (render-bars {expr (into (sorted-map)
-                                    (for [v variants]
-                                      [v (measure expr v)]))}))}}}
+  {:task (let [{:keys [expr]} (args)]
+           (if-not expr
+             (run 'report-all)
+             (let [variants (keys (get (all-tests) expr))]
+               (doseq [v variants]
+                 (println "compiling" expr v)
+                 (prepare! expr v)
+                 (compile! expr v 'lite))
+               (println (str "\n=== " expr " (lite-mode brotli) ==="))
+               (render-bars {expr (into (sorted-map)
+                                        (for [v variants]
+                                          [v (measure expr v)]))}))))}}}

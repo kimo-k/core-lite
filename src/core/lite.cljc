@@ -6,7 +6,7 @@
   Require with an alias: [core.lite :as 🪶]
   github.com/kimo-k/core-lite"
   (:refer-clojure :exclude [assoc update assoc-in update-in select-keys range
-                            atom])
+                            atom swap!])
   #?(:clj (:require [clojure.core :as core])))
 
 #?(:clj
@@ -163,12 +163,19 @@
    (defn atom [init] (core/atom init))
    :cljs
    (defn atom
-     "Drop-in for cljs.core/atom in :lite-mode builds. Returns a LiteAtom with
-  only :state and :watches fields (no :meta, no :validator) and a reduce-kv-based
-  -notify-watches (no doseq → no ChunkedSeq leak).
-
-  LiteAtom implements IReset and ISwap (in addition to cljs.core/Atom's protocols)
-  so cljs.core/swap!, reset!, add-watch, remove-watch, deref all dispatch correctly
-  via protocols. ISwap is 2/3/4-arity — no variadic (avoids apply infrastructure)."
+     "Drop-in for cljs.core/atom in :lite-mode builds. Returns a LiteAtom backed
+  by a native js/Map for watches (no ClojureScript collection machinery).
+  ISwap is 2/3/4-arity — no variadic (avoids apply infrastructure)."
      [x]
      (LiteAtom. x nil nil nil)))
+
+#?(:clj
+   (defn swap! [& args] (apply core/swap! args))
+   :cljs
+   (defn swap!
+     "Drop-in for cljs.core/swap! in :lite-mode builds. Fixed arities only —
+  no variadic, which avoids the IndexedSeq reference that cljs.core/swap!'s
+  variadic arity emits (pulling in the full seq chain)."
+     ([a f]     (-swap! a f))
+     ([a f x]   (-swap! a f x))
+     ([a f x y] (-swap! a f x y))))

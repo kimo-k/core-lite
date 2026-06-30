@@ -20,6 +20,7 @@
                       expr  (or (get-in tests [expr variant])
                                 (throw (ex-info (str "No variant " variant " for :expr " expr)
                                                 {:known (expr tests)})))]
+                  (.mkdirs (java.io.File. "test"))
                   (spit "test/test.cljs"
                         (str "(ns test\n  (:require [core.lite :as 🪶]))\n\n"
                              "(defn ^:export main []\n  "
